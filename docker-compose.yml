@@ -1,0 +1,27 @@
+services:
+  app:
+    build: .
+    container_name: automatic_control_app
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env
+    volumes:
+      - .:/automatic_control
+    depends_on:
+      - db
+
+  db:
+    image: postgres:16
+    container_name: automatic_control_db
+    environment:
+      POSTGRES_USER: ${DATABASE_USER}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_DB: ${DATABASE_NAME}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:

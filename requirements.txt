@@ -1,0 +1,9 @@
+flask
+requests
+python-dotenv
+pytz
+apscheduler
+psycopg2-binary
+sqlalchemy
+gspread 
+oauth2client
