@@ -3,17 +3,29 @@ import pytz
 from bitrix24_api import call_api
 from utils import *
 
+from datetime import datetime, timedelta
+import pytz
+
 def get_contacts_without_name():
     """
-    Функция для получения контактов без заполненного имени.
+    Функция для получения контактов без заполненного имени, созданных за последние 6 часов.
     """
     CONTACTS_METHOD = 'crm.contact.list'
+
+    # Получаем текущее время и вычитаем 6 часов
+    timezone = pytz.timezone('Europe/Moscow')
+    now = datetime.now(timezone)
+    six_hours_ago = now - timedelta(hours=6)
+    
+    # Преобразуем дату в строку в формате ISO 8601 для запроса
+    six_hours_ago_str = six_hours_ago.strftime('%Y-%m-%dT%H:%M:%S%z')
 
     # Параметры запроса
     params = {
         'filter': {
-            'NAME': 'Без имени',  # Имя не указано 
-            '!PHONE': ''  # У контакта есть телефон
+            'NAME': 'Без имени',  # Имя не указано
+            '!PHONE': '',         # У контакта есть телефон
+            '>=DATE_CREATE': six_hours_ago_str  # Созданы за последние 6 часов
         },
         'select': ['ID', 'NAME', 'LAST_NAME', 'PHONE', 'ASSIGNED_BY_ID', 'CREATED_BY_ID']
     }
@@ -39,10 +51,10 @@ def get_contacts_without_name():
     return all_contacts
 
 
-def get_first_call_time(contact_id):
+def get_calls_for_contacts(contact_ids):
     """
-    Функция для получения времени первого исходящего звонка конкретному контакту
-    и данных о пользователе, совершившем звонок.
+    Функция для получения всех завершенных исходящих звонков за последние 24 часа
+    для списка контактов.
     """
     ACTIVITIES_METHOD = 'crm.activity.list'
 
@@ -51,7 +63,8 @@ def get_first_call_time(contact_id):
             'TYPE_ID': 2,           # Тип активности: звонок
             'DIRECTION': 2,         # Направление: исходящий звонок
             'COMPLETED': 'Y',       # Завершенные звонки
-            '>=START_TIME': (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%dT%H:%M:%S%z')
+            '>=START_TIME': (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%dT%H:%M:%S%z'),
+            'COMMUNICATIONS.ENTITY_ID': contact_ids  # Фильтр по контактам
         },
         'order': {
             'START_TIME': 'ASC'     # Сортируем по времени начала (от старых к новым)
@@ -59,43 +72,24 @@ def get_first_call_time(contact_id):
         'select': ['ID', 'START_TIME', 'RESPONSIBLE_ID', 'COMMUNICATIONS']
     }
 
+    all_calls = []
     start = 0
     while True:
         params['start'] = start
         data = call_api(ACTIVITIES_METHOD, params=params, http_method='POST')
 
-        # Проверяем, есть ли результат в данных
         if data and 'result' in data and data['result']:
             activities = data['result']
-            
-            # Перебираем все активности, чтобы найти первую подходящую
-            for activity in activities:
-                communications = activity.get('COMMUNICATIONS', [])
-                
-                # Проверяем, есть ли в коммуникациях указанный контакт
-                for comm in communications:
-                    if comm.get('ENTITY_TYPE_ID') == '3' and comm.get('ENTITY_ID') == str(contact_id):  # 3 - это тип "Контакт"
-                        first_call_time_str = activity.get('START_TIME')
-                        
-                        if first_call_time_str:
-                            try:
-                                first_call_time = datetime.strptime(first_call_time_str, '%Y-%m-%dT%H:%M:%S%z')
-                                return first_call_time  # Возвращаем время и ID пользователя
-                            except ValueError:
-                                print(f"Неверный формат даты для звонка контакта ID {contact_id}: {first_call_time_str}")
-                                return None
-            
-            # Переходим к следующей странице, если есть
+            all_calls.extend(activities)
+
             if 'next' in data:
                 start = data['next']
             else:
                 break
         else:
-            # Нет данных или произошла ошибка
             break
 
-    # Если не нашли подходящей активности
-    return None
+    return all_calls
 
 
 def check_contact_name_missing():
@@ -104,6 +98,27 @@ def check_contact_name_missing():
     """
     contacts = get_contacts_without_name()
     print(f"[Проверка 4] Контактов без имени: {len(contacts)}")
+
+    if not contacts:
+        print("Нет контактов без имени.")
+        return []
+
+    # Собираем все контактные ID
+    contact_ids = [contact['ID'] for contact in contacts]
+
+    # Получаем все звонки для контактов за последние 24 часа
+    calls = get_calls_for_contacts(contact_ids)
+
+    # Группируем звонки по контактам
+    calls_by_contact = {}
+    for call in calls:
+        communications = call.get('COMMUNICATIONS', [])
+        for comm in communications:
+            if comm.get('ENTITY_TYPE_ID') == '3':  # Контакты
+                contact_id = comm.get('ENTITY_ID')
+                if contact_id not in calls_by_contact:
+                    calls_by_contact[contact_id] = []
+                calls_by_contact[contact_id].append(call)
 
     contacts_to_notify = []
     rows_to_add = []  # Для записи данных в Google Sheets
@@ -122,21 +137,28 @@ def check_contact_name_missing():
         assigned_by_id = contact.get('ASSIGNED_BY_ID')
         created_by_id = contact.get('CREATED_BY_ID')
 
-        # Проверяем, был ли звонок этому контакту
-        first_call_time = get_first_call_time(contact_id)
+        # Ищем первый исходящий звонок для контакта
+        contact_calls = calls_by_contact.get(contact_id, [])
+        if contact_calls:
+            first_call = contact_calls[0]  # Звонки уже отсортированы по времени
+            first_call_time_str = first_call.get('START_TIME')
 
-        if first_call_time:
-            time_since_first_call = now - first_call_time.astimezone(timezone)
+            try:
+                first_call_time = datetime.strptime(first_call_time_str, '%Y-%m-%dT%H:%M:%S%z')
+                time_since_first_call = now - first_call_time.astimezone(timezone)
 
-            if time_since_first_call > timedelta(hours=3):
-                contacts_to_notify.append({
-                    'contact_id': contact_id,
-                    'phone_numbers': [phone['VALUE'] for phone in phone_numbers],
-                    'first_call_time': first_call_time.strftime('%Y-%m-%d %H:%M:%S'),
-                    'hours_since_first_call': time_since_first_call.total_seconds() / 3600,
-                    'assigned_by_id': assigned_by_id,
-                    'created_by_id': created_by_id
-                })
+                if time_since_first_call > timedelta(hours=3):
+                    contacts_to_notify.append({
+                        'contact_id': contact_id,
+                        'phone_numbers': [phone['VALUE'] for phone in phone_numbers],
+                        'first_call_time': first_call_time.strftime('%Y-%m-%d %H:%M:%S'),
+                        'hours_since_first_call': time_since_first_call.total_seconds() / 3600,
+                        'assigned_by_id': assigned_by_id,
+                        'created_by_id': created_by_id
+                    })
+            except ValueError:
+                print(f"Неверный формат даты для звонка контакта ID {contact_id}: {first_call_time_str}")
+                continue
         else:
             # Если звонков не было, пропускаем контакт
             continue
