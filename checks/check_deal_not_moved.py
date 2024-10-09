@@ -58,10 +58,13 @@ def get_stage_changes_for_deals(deal_ids):
     """
     STAGE_HISTORY_METHOD = 'crm.stagehistory.list'
 
+    # Преобразуем множество в список
+    deal_ids_list = list(deal_ids)
+
     params = {
         'entityTypeId': 2,  # Тип сущности: 2 - сделка
         'filter': {
-            'OWNER_ID': deal_ids  # Передаем список сделок с помощью оператора IN
+            'OWNER_ID': deal_ids_list  # Передаем список сделок с помощью оператора IN
         },
         'order': {
             'ID': 'DESC'
@@ -75,8 +78,10 @@ def get_stage_changes_for_deals(deal_ids):
     while True:
         params['start'] = start
         data = call_api(STAGE_HISTORY_METHOD, params=params, http_method='POST')
-        if data and 'result' in data and data['result']:
-            stage_changes = data['result']
+
+        # Проверяем, что ответ содержит ключи 'result' и 'items'
+        if data and 'result' in data and 'items' in data['result']:
+            stage_changes = data['result']['items']  # Извлекаем элементы из 'items'
             all_stage_changes.extend(stage_changes)
 
             if 'next' in data:
@@ -101,10 +106,11 @@ def check_deal_not_moved():
         print("Нет сделок с завершенными активностями в указанном интервале.")
         return []
 
-    deal_ids = {activity['OWNER_ID'] for activity in activities}
+    deal_ids = [activity['OWNER_ID'] for activity in activities]  # Преобразуем множество в список
 
     # Получаем изменения стадии для всех сделок
     stage_changes = get_stage_changes_for_deals(deal_ids)
+
 
     deals_not_moved = []
     rows_to_add = []  # Для записи данных в Google Sheets
