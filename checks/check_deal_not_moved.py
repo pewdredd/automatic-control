@@ -98,6 +98,7 @@ def get_stage_changes_for_deals(deal_ids):
 def check_deal_not_moved():
     """
     Проверка сделок, которые не были переведены по воронке в течение 6 часов после завершения последнего действия.
+    Записывает ссылку и статус сделки в CRM таблицу.
     """
     activities = get_deals_with_recent_activities()
     print(f"[Проверка 3] Сделок с завершенными активностями за последние 3 дня до 6 часов назад: {len(activities)}")
@@ -106,11 +107,10 @@ def check_deal_not_moved():
         print("Нет сделок с завершенными активностями в указанном интервале.")
         return []
 
-    deal_ids = [activity['OWNER_ID'] for activity in activities]  # Преобразуем множество в список
+    deal_ids = [activity['OWNER_ID'] for activity in activities]
 
     # Получаем изменения стадии для всех сделок
     stage_changes = get_stage_changes_for_deals(deal_ids)
-
 
     deals_not_moved = []
     rows_to_add = []  # Для записи данных в Google Sheets
@@ -166,10 +166,21 @@ def check_deal_not_moved():
         user_ids = [item['responsible_id'] for item in deals_not_moved]
         user_names = get_user_names(user_ids)
 
+        # Получаем данные о сделках
+        deals_data = get_deal_data([item['deal_id'] for item in deals_not_moved])
+        deal_info = {deal['ID']: deal for deal in deals_data}
+
         # Выводим информацию и добавляем строки для записи в Google Sheets
         print("\nСписок таких сделок:")
         for item in deals_not_moved:
             responsible_name = user_names.get(item['responsible_id'], f"ID {item['responsible_id']}")
+            deal_data = deal_info.get(item['deal_id'], {'TITLE': f"ID {item['deal_id']}", 'STAGE_ID': 'Unknown'})
+            deal_title = deal_data['TITLE']
+            deal_status = deal_data.get('STAGE_ID', 'Unknown')  # Получаем статус сделки
+            
+            # Формируем ссылку на сделку
+            deal_link = f"https://kubnov.bitrix24.ru/crm/deal/details/{item['deal_id']}/"
+
             remark = f"Сделка не была переведена по воронке в течение 6 часов после последнего действия"
             
             # Печатаем в терминал
@@ -180,9 +191,10 @@ def check_deal_not_moved():
                 datetime.now().strftime('%Y-%m-%d %H:%M:%S'),  # Текущая дата и время
                 "Program",
                 item['deal_id'],
-                "",
-                "",
+                deal_title,  # Название сделки
+                deal_status,  # Статус сделки
                 responsible_name,
+                deal_link,  # Ссылка на сделку
                 remark
             ]
             rows_to_add.append(row)

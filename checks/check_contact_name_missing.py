@@ -95,6 +95,7 @@ def get_calls_for_contacts(contact_ids):
 def check_contact_name_missing():
     """
     Проверка контактов, у которых не заполнено имя клиента и прошло более 3 часов с момента первого звонка.
+    Записывает ссылку на контакт и информацию об ответственном и создателе в CRM таблицу.
     """
     contacts = get_contacts_without_name()
     print(f"[Проверка 4] Контактов без имени: {len(contacts)}")
@@ -187,6 +188,9 @@ def check_contact_name_missing():
 
             remark = "Контакт без имени и прошло более 3 часов с момента первого звонка"
 
+            # Формируем ссылку на профиль контакта
+            contact_link = f"https://kubnov.bitrix24.ru/crm/contact/details/{item['contact_id']}/"
+
             print(
                 f"Контакт ID: {item['contact_id']}, "
                 f"Телефон: {', '.join(item['phone_numbers'])}, "
@@ -201,9 +205,10 @@ def check_contact_name_missing():
                 datetime.now().strftime('%Y-%m-%d %H:%M:%S'),  # Текущая дата и время
                 "Program",
                 item['contact_id'],
-                "",
-                "",
+                "",  # Название контакта (если требуется)
+                "",  # Статус контакта (если требуется)
                 assigned_by_name,
+                contact_link,  # Ссылка на профиль контакта
                 remark
             ]
             rows_to_add.append(row)

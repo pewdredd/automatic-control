@@ -56,6 +56,7 @@ def check_next_step_missing():
     """
     Функция проверяет ответственных за сделки завершенные за последние 6 часов,
     и сравнивает с теми, кто создал новые сделки за последние 2 часа.
+    Также записывает ссылку на ответственного в CRM таблицу.
     """
     # Получаем завершенные дела за последние 6 часов
     completed_activities = get_completed_activities()
@@ -67,7 +68,7 @@ def check_next_step_missing():
     # Извлекаем ответственных (responsible_id) из завершенных сделок
     responsible_ids_from_completed = {activity['RESPONSIBLE_ID'] for activity in completed_activities}
 
-    # Получаем текущие время и время 2 часа назад
+    # Получаем текущее время и время 2 часа назад
     timezone = pytz.timezone('Europe/Moscow')
     now = datetime.now(timezone)
     two_hours_ago = now - timedelta(hours=2)
@@ -127,6 +128,9 @@ def check_next_step_missing():
             responsible_name = user_names.get(item['responsible_id'], f"ID {item['responsible_id']}")
             remark = item['remark']
 
+            # Формируем ссылку на профиль ответственного
+            responsible_link = f"https://kubnov.bitrix24.ru/company/personal/user/{item['responsible_id']}/"
+
             # Печатаем в терминал
             print(f"Ответственный: {responsible_name} ({item['responsible_id']})")
 
@@ -136,8 +140,9 @@ def check_next_step_missing():
                 "Program",
                 "",
                 "",
-                "",
+                "",  # Можем добавить название сделки или статус, если потребуется
                 responsible_name,
+                responsible_link,  # Ссылка на профиль ответственного
                 remark
             ]
             rows_to_add.append(row)

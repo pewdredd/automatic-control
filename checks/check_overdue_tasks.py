@@ -54,7 +54,8 @@ def get_overdue_activities():
 
 def check_overdue_activities():
     """
-    Проверка просроченных дел (активностей) внутри сделок и вывод результатов.
+    Проверка просроченных дел (активностей) внутри сделок и вывод результатов,
+    запись ссылки и статуса сделки в CRM таблицу.
     """
     overdue_activities = get_overdue_activities()
     print(f"[Проверка 1] Просроченных дел более чем на 1 час: {len(overdue_activities)}")
@@ -82,23 +83,29 @@ def check_overdue_activities():
             subject = activity['SUBJECT']
             activity_id = activity['ID']
             deal_id = activity['OWNER_ID']
+            
             # Получаем информацию о сделке
-            deal_data = deal_info.get(deal_id, {'TITLE': f"ID {deal_id}", 'ASSIGNED_BY_ID': None})
+            deal_data = deal_info.get(deal_id, {'TITLE': f"ID {deal_id}", 'ASSIGNED_BY_ID': None, 'STAGE_ID': 'Unknown'})
             deal_title = deal_data['TITLE']
+            deal_status = deal_data.get('STAGE_ID', 'Unknown')  # Получаем статус сделки
+            
+            # Формируем ссылку на сделку
+            deal_link = f"https://kubnov.bitrix24.ru/crm/deal/details/{deal_id}/"
 
             # Формируем замечание
             remark = f"Дело просрочено более чем на 1 час. Дедлайн: {deadline}"
 
-            print(f"Дело ID: {activity_id}, Тема: {subject}, Ответственный: {responsible_name}, Дедлайн: {deadline}, Сделка: {deal_title}")
+            print(f"Дело ID: {activity_id}, Тема: {subject}, Ответственный: {responsible_name}, Дедлайн: {deadline}, Сделка: {deal_title}, Статус: {deal_status}")
 
             # Подготовка строки для записи в Google Sheets
             row = [
                 datetime.now().strftime('%Y-%m-%d %H:%M:%S'),  # Текущая дата и время
                 "Program",
                 deal_id,
-                "",
-                "",
+                deal_title,  # Название сделки
+                deal_status,  # Статус сделки
                 responsible_name,
+                deal_link,  # Ссылка на сделку
                 remark
             ]
             rows_to_add.append(row)

@@ -50,3 +50,4 @@ def write_to_sheet(data):
         sheet.append_rows(rows_to_write, value_input_option='RAW')
     else:
         print("Нет новых данных для записи.")
+        

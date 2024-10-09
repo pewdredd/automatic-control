@@ -46,7 +46,7 @@ def get_deal_activities(deal_id, fixed_time):
 
 def check_uncontacted_clients():
     """
-    Проверка незаконтакченных клиентов по сделкам.
+    Проверка незаконтакченных клиентов по сделкам, с записью ссылки и ответственного в CRM таблицу.
     """
     print(f"[Проверка 5]")
 
@@ -123,6 +123,9 @@ def check_uncontacted_clients():
             responsible_name = user_names.get(item['responsible_id'], f"ID {item['responsible_id']}")
             created_by_name = user_names.get(item['created_by_id'], f"ID {item['created_by_id']}")
 
+            # Формируем ссылку на сделку
+            deal_link = f"https://kubnov.bitrix24.ru/crm/deal/details/{item['deal_id']}/"
+
             print(
                 f"Сделка ID: {item['deal_id']}, "
                 f"Зафиксированное время: {item['fixed_time']}, "
@@ -139,9 +142,10 @@ def check_uncontacted_clients():
                 datetime.now().strftime('%Y-%m-%d %H:%M:%S'),  # Текущая дата и время
                 "Program",
                 item['deal_id'],
-                "",
-                "",
+                "",  # Название сделки (если требуется)
+                "",  # Статус сделки (если требуется)
                 responsible_name,
+                deal_link,  # Ссылка на сделку
                 remark
             ]
             rows_to_add.append(row)

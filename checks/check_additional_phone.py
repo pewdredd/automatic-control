@@ -93,6 +93,9 @@ def check_additional_phone_number():
                                     # Получаем имя ответственного
                                     user_name = get_user_names([responsible_id]).get(responsible_id, f"ID {responsible_id}")
                                     
+                                    # Формируем ссылку на сделку
+                                    deal_link = f"https://kubnov.bitrix24.ru/crm/deal/details/{deal_id}/"
+
                                     # Формируем замечание для Google Sheets
                                     remark = "Дополнительный номер не внесен в течение часа после первого звонка"
                                     
@@ -101,9 +104,10 @@ def check_additional_phone_number():
                                         datetime.now().strftime('%Y-%m-%d %H:%M:%S'),  # Текущая дата и время
                                         "Program",
                                         deal_id,
-                                        "",
-                                        "",
+                                        deal_info.get('TITLE', ""),  # Название сделки
+                                        deal_info.get('STAGE_ID', ""),  # Статус сделки
                                         user_name,
+                                        deal_link,  # Ссылка на сделку
                                         remark
                                     ]
                                     rows_to_add.append(row)
